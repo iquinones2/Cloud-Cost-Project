@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Cloud Cost Dashboard</title>
+</head>
+<body>
+    <button onclick="calculatedCost(event)">Run Cost Calculation</button>
+    <button onclick="loadHistory()">Load History</button>
+    <button onclick="deleteHistory()">Delete History</button>
+    <table id="output" border="1" style="border-collapse: collapse; margin-top: 20px;">
+        <thead>
+            <tr>
+                <th>Service</th>
+                <th>Usage</th>
+                <th>Price</th>
+                <th>Total Cost</th>
+                <th>Timestamp</th>
+            </tr>
+        </thead>
+        <tbody id="output-body">
+        </tbody>
+    </table>
+    <script>
+        async function calculatedCost(event) {
+            event.preventDefault();
+            try{
+                const response = await fetch("http://127.0.0.1:8000/calculate", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({
+                        services: [
+                            {name: "S3", usage:100, price:0.02},
+                            {name: "Lambda", usage:200, price:0.01}
+                        ]
+                    })
+                });
+                const data = await response.json();
+                renderTable(data.history);
+            }
+            catch(e){
+                alert("Error: " + e.message);
+            }
+            const data = await response.json();
+            renderTable(data.history);
+        }
+
+        async function loadHistory() {
+            const response = await fetch("http://127.0.0.1:8000/data");
+            const data = await response.json();
+            renderTable(data.history);
+        }
+
+        async function deleteHistory() {
+            const response = await fetch("http://127.0.0.1:8000/data", {
+                method: "DELETE"
+            });
+            document.getElementById("output-body").innerHTML = "";
+        }
+
+        function renderTable(history){
+            const tbody = document.getElementById("output-body");
+            tbody.innerHTML = "";
+
+            history.forEach(entry => {
+                entry.services.forEach(service => {
+                    const cost = (service.usage * service.price).toFixed(2);
+                    const row = `<tr>
+                        <td>${service.name}</td>
+                        <td>${service.usage}</td>
+                        <td>$${service.price}</td>
+                        <td>$${cost}</td>
+                        <td>${new Date(entry.timestamp).toLocaleString()}</td>
+                    </tr>`;
+                    tbody.innerHTML += row;
+                });
+            });
+        }
+    </script>
+</body>
+</html>
