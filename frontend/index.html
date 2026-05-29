@@ -1,12 +1,82 @@
 <!DOCTYPE html>
 <html>
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initital-scale=1.0">
     <title>Cloud Cost Dashboard</title>
+
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/css/adminlte.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <style>
+        .stat-card { border-left: 4px solid; border-radius: 4px; }
+        .stat-card.blue  { border-color: #3c8dbc; }
+        .stat-card.green { border-color: #00a65a; }
+        .stat-card.orange{ border-color: #f39c12; }
+        .stat-card.red   { border-color: #dd4b39; }
+        .chart-container { position: relative; height: 320px; }
+    </style>
 </head>
-<body>
-    <button onclick="calculatedCost(event)">Run Cost Calculation</button>
-    <button onclick="loadHistory()">Load History</button>
-    <button onclick="deleteHistory()">Delete History</button>
+<body class="hold-transition sidebar-mini layout-fixed">
+    <div class="wrapper">
+        <nav class="main-header navbar navbar-expand navbar-white navbar-light">
+            <ul class="navbar-nav">
+                <li class="nav-item">
+                    <a class="nav-link" data-widget="pushmenu" href="#"><i class="fas fa-bars">
+                    </i></a>
+                </li>
+                <li class="nav-item d-none d-sm-inline-block">
+                    <a href="#" class="nav-link">Home</a>
+                </li>
+            </ul>
+            <ul class="navbar-nav ml-auto">
+                <li class="nav-item">
+                    <span class="nav-link text-muted" id="last-updated"></span>
+                </li>
+            </ul>
+        </nav>
+
+        <!-- Sidebar -->
+    <aside class="main-sidebar sidebar-dark-primary elevation-4">
+        <a href="#" class="brand-link">
+            <i class="fas fa-cloud ml-3 mr-2 text-info"></i>
+            <span class="brand-text font-weight-light">AWS Cost Simulator</span>
+        </a>
+        <div class="sidebar">
+            <nav class="mt-2">
+                <ul class="nav nav-pills nav-sidebar flex-column" data-widget="treeview" role="menu">
+                    <li class="nav-item">
+                        <a href="#" class="nav-link active">
+                            <i class="nav-icon fas fa-tachometer-alt"></i>
+                            <p>Dashboard</p>
+                        </a>
+                    </li>
+                    <li class="nav-header">ACTIONS</li>
+                    <li class="nav-item">
+                        <a href="#" class="nav-link" onclick="calculatedCost(event)">
+                            <i class="nav-icon fas fa-play text-success"></i>
+                            <p>Run Calculation</p>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="#" class="nav-link" onclick="loadHistory(event)">
+                            <i class="nav-icon fas fa-history text-info"></i>
+                            <p>Load History</p>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="#" class="nav-link" onclick="deleteHistory(event)">
+                            <i class="nav-icon fas fa-trash text-danger"></i>
+                            <p>Clear History</p>
+                        </a>
+                    </li>
+                </ul>
+            </nav>
+        </div>
+    </aside>
+
     <table id="output" border="1" style="border-collapse: collapse; margin-top: 20px;">
         <thead>
             <tr>
@@ -20,7 +90,69 @@
         <tbody id="output-body">
         </tbody>
     </table>
+    <h3>Cost Distribution</h3>
+    <canvas id="costChart" width="400" height="200"></canvas>
+
+    <footer class="main-footer">
+        <strong>Cloud Cost Dashboard</strong>
+        <div class="float-right d-none d-sm-inline-block">
+            <b>Version</b> 1.0
+        </div>
+    </footer>
     <script>
+        function buildChartData(history){
+            const totals = {};
+
+            history.forEach(entry => {
+                entry.services.forEach(service => {
+                    const cost = service.usage * service.price;
+                    if(totals[service.name]){
+                        totals[service.name] += cost;
+                    }else{
+                        totals[service.name] = cost;
+                    }
+                });
+            });
+            return{
+                labels:Object.keys(totals),
+                values:Object.values(totals)
+            };
+        }
+
+        let chartInstance = null;
+
+        function renderChart(history){
+            const{labels, values} = buildChartData(history);
+            const ctx = document.getElementById('costChart').getContext('2d');
+            if(chartInstance){
+                chartInstance.destroy();
+            }
+            chartInstance = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        data: values,
+                        backgroundColor:[
+                            '#4A90D9', '#27AE60', '#E67E22', '#E74C3C', '#9B59B6', '#1ABC9C'
+                        ]
+                    }]
+                },
+                options: {
+                    plugins: {
+                        legend: { position: 'bottom' },
+                        tooltip:{
+                            callbacks: {
+                                label: function(context){
+                                    return context.label + ': $' + context.parsed.y.toFixed(2);
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
         async function calculatedCost(event) {
             event.preventDefault();
             try{
@@ -38,18 +170,18 @@
                 });
                 const data = await response.json();
                 renderTable(data.history);
+                renderChart(data.history);
             }
             catch(e){
                 alert("Error: " + e.message);
             }
-            const data = await response.json();
-            renderTable(data.history);
         }
 
         async function loadHistory() {
             const response = await fetch("http://127.0.0.1:8000/data");
             const data = await response.json();
             renderTable(data.history);
+            renderChart(data.history);
         }
 
         async function deleteHistory() {
@@ -57,6 +189,7 @@
                 method: "DELETE"
             });
             document.getElementById("output-body").innerHTML = "";
+            renderChart([]);
         }
 
         function renderTable(history){
